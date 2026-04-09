@@ -7,7 +7,7 @@ description: >
   Use when user says: "debug-mode", "debug mode", "探针调试", "运行时调试",
   "trace this bug", "找出这个bug", "加日志排查", "插探针",
   or needs to debug runtime issues that static analysis can't solve.
-version: 1.0.0
+version: 1.1.0
 allowed-tools: Bash, Read, Write, Edit, Grep, Glob, Agent
 ---
 
@@ -24,7 +24,7 @@ Each step ends with a checkpoint that you must print exactly:
 - `✅ CHECKPOINT 1: Probe plan created — N probes planned`
 - `✅ CHECKPOINT 2: Log collector started`
 - `✅ CHECKPOINT 3: N probes inserted into source files` (you must have used the Edit tool N times)
-- `✅ CHECKPOINT 4: Code executed, log file has N entries`
+- `✅ CHECKPOINT 4: N log entries collected`
 - `✅ CHECKPOINT 5: Root cause identified with log evidence`
 - `✅ CHECKPOINT 6: Fix applied and verified with probes`
 - `✅ CHECKPOINT 7: All probes removed, cleanup complete`
@@ -32,10 +32,10 @@ Each step ends with a checkpoint that you must print exactly:
 **HARD RULES:**
 
 1. You CANNOT print CHECKPOINT 5 without first printing CHECKPOINTS 1-4
-2. You CANNOT propose a fix without citing specific lines from `.claude-debug/debug.log`
+2. You CANNOT propose a fix without citing specific log entries as evidence
 3. You MUST use the Edit tool to physically insert probe code into source files at Step 3 — reading code and proposing probes mentally does not count
-4. You MUST use the Bash tool to run `cat .claude-debug/debug.log` at Step 5 — you cannot analyze logs you haven't collected
-5. Even if the bug is obvious from reading code, you MUST still instrument, run, and collect. This is non-negotiable. The purpose is runtime verification, not static analysis.
+4. You MUST collect and read actual log output at Step 5 — you cannot analyze logs you haven't collected
+5. Static analysis may reveal an obvious issue — you may fix it first. But if the fix doesn't work, you MUST instrument and collect runtime data before attempting another fix. The purpose is runtime verification, not guesswork.
 
 ## Core Principles
 
@@ -67,7 +67,11 @@ Print: `✅ CHECKPOINT 0: Context gathered`
 1. Read relevant code, identify suspect areas
 2. Form 2-3 hypotheses
 3. For each hypothesis, plan probes: which file, which line, which variables to observe
-4. Output the probe plan as a table, then **immediately proceed to Step 2**:
+4. **Determine the logging strategy** based on runtime environment:
+   - **CLI / Server / Script** → file-based logging (`.claude-debug/debug.log`)
+   - **Browser / Frontend (Vue, React, etc.)** → `console.log` probes (user pastes output)
+   - **Hybrid (SSR, Electron)** → file-based for server, console for renderer
+5. Output the probe plan as a table, then **immediately proceed to Step 2**:
 
 ```
 📋 Probe Plan:
@@ -77,10 +81,13 @@ Print: `✅ CHECKPOINT 0: Context gathered`
 | 2 | app.js:45 | reserve-entry | stock, reserved | Actual stock state at reservation time |
 ...
 
+Logging strategy: file-based / console / hybrid
 ⏳ Inserting probes...
 ```
 
 ### Step 2: Start Log Collector
+
+**For file-based logging (CLI / Server):**
 
 Initialize the debug directory with a structured log system:
 
@@ -109,17 +116,19 @@ echo $! > .claude-debug/server.pid
 curl -s http://localhost:3333/health
 ```
 
-Default to file-based logging (more universal).
+**For console-based logging (Browser / Frontend):**
+
+No setup needed — probes use `console.log` with a `[DEBUG PROBE N]` prefix. Tell the user to open the browser console (F12 → Console) and filter by `DEBUG PROBE`.
 
 ### Step 3: Insert Probes (MUST use Edit tool)
 
 **You MUST use the Edit tool to physically modify source files.** For each probe in your plan, call the Edit tool once to insert the probe code. Do not just describe what probes you would insert — actually insert them.
 
-Select the probe template matching the project language. **Every probe MUST include**:
+Select the probe template matching the project language **and runtime environment**. **Every probe MUST include**:
 - File name and line number
 - Label (semantic description of probe location)
 - Key variable values
-- Timestamp (for file-based logging)
+- Timestamp (for file-based logging) or structured prefix (for console logging)
 
 All probes MUST be wrapped in START/END block comments for safe block-level cleanup:
 
@@ -133,7 +142,33 @@ Where `[N]` is the probe number from the plan. This ensures cleanup can delete e
 
 After inserting all probes, print: `✅ CHECKPOINT 3: N probes inserted into source files`
 
-#### JavaScript / TypeScript
+#### Browser / Frontend (Vue, React, Svelte, etc.)
+
+Use `console.log` with a structured prefix. For reactive frameworks, access `.value` for refs/signals:
+
+```typescript
+// 🔍 DEBUG PROBE [1] funcName-entry
+console.log(`[DEBUG PROBE 1] funcName-entry | var1=${var1} | var2=${JSON.stringify(var2)}`)
+// 🔍 DEBUG PROBE END [1]
+```
+
+Vue-specific (reactive state):
+
+```typescript
+// 🔍 DEBUG PROBE [1] reactive-state
+console.log(`[DEBUG PROBE 1] reactive-state | refVal=${someRef.value} | computedVal=${someComputed.value} | storeVal=${store.someState}`)
+// 🔍 DEBUG PROBE END [1]
+```
+
+React-specific (hooks state):
+
+```typescript
+// 🔍 DEBUG PROBE [1] component-render
+console.log(`[DEBUG PROBE 1] component-render | state=${JSON.stringify(state)} | prop=${prop}`)
+// 🔍 DEBUG PROBE END [1]
+```
+
+#### JavaScript / TypeScript (Node.js / Server)
 
 ```javascript
 // 🔍 DEBUG PROBE [1] funcName-entry
@@ -190,7 +225,7 @@ echo "[$(date -Iseconds)] [bash] script.sh:42 | funcName-entry | var=$variable" 
 
 ### Step 4: Run & Reproduce
 
-**Before each run**, write a run separator to the log:
+**For file-based logging:** Before each run, write a run separator to the log:
 
 ```bash
 RUN_NUM=$(($(grep -oP 'run_count=\K\d+' .claude-debug/state) + 1))
@@ -204,21 +239,30 @@ Then run the code:
 <project run command>
 ```
 
-If the project requires manual interaction (GUI app, browser), tell the user:
+**For console-based logging (Browser / Frontend):** Tell the user:
 
 > "Probes inserted at:
 > - `fileA.xx:line` — observing XXX
 > - `fileB.xx:line` — observing YYY
 >
-> Please reproduce the issue and let me know when done."
+> Please:
+> 1. Open browser console (F12 → Console)
+> 2. Reproduce the issue
+> 3. Copy all lines starting with `[DEBUG PROBE` and paste them here"
+
+**For any project requiring manual interaction (GUI app, mobile):** Tell the user which probes are in place and ask them to reproduce and share the output.
 
 **For intermittent bugs (race conditions, timing issues):** run multiple times (2-3 runs) with a separator before each. Compare logs across `RUN #1`, `RUN #2`, etc. to spot inconsistencies.
 
 ### Step 5: Analyze Logs
 
+**For file-based logging:**
+
 ```bash
 cat .claude-debug/debug.log
 ```
+
+**For console-based logging:** analyze the log entries pasted by the user.
 
 Analysis checklist:
 - **Ordering**: Is the execution order as expected?
@@ -231,22 +275,32 @@ Analysis checklist:
 
 Based on log analysis:
 
-1. State the root cause clearly, citing specific log entries as evidence (include RUN # and timestamp)
+1. State the root cause clearly, citing specific log entries as evidence
 2. Implement the fix
-3. **Keep probes in place**, write a new run separator labeled `VERIFY`, re-run to collect "after fix" logs:
+3. **Keep probes in place**, re-run to collect "after fix" logs:
 
+For file-based logging:
 ```bash
 echo -e "\n========== VERIFY | $(date -Iseconds) ==========" >> .claude-debug/debug.log
 <project run command>
 ```
 
-4. Compare "before fix" run(s) with "VERIFY" run — the problematic log entries should now show correct values
+For console-based logging: ask the user to reproduce again and paste the new console output.
+
+4. Compare "before fix" and "VERIFY" logs — the problematic entries should now show correct values
 5. After verification passes, proceed to cleanup
 
-If analysis is insufficient to locate the issue:
-- Add more fine-grained probes (narrow the scope)
-- Return to Step 4 and re-run
-- Maximum 3 iterations. After 3 rounds, report findings and discuss next steps with the user
+### Fix Failed — What Next
+
+If the user reports the fix didn't work:
+
+1. **Don't remove existing probes** — they provide baseline data
+2. **Add targeted probes** around the fix you just applied — observe whether the fix code actually executes, and what values it sees
+3. **Compare before/after logs** — look for:
+   - Did the new code path execute at all? (missing probe entry = code not reached)
+   - Did it execute but with unexpected input values?
+   - Did another code path override or undo the fix?
+4. Re-run and collect. Maximum 3 iterations total. After 3 rounds, report findings and discuss next steps with the user.
 
 ### Step 7: Cleanup
 
@@ -258,14 +312,14 @@ if [ -f .claude-debug/server.pid ]; then
   kill $(cat .claude-debug/server.pid) 2>/dev/null
 fi
 
-# Delete debug directory
+# Delete debug directory (if created)
 rm -rf .claude-debug/
 ```
 
 Search for all probe blocks in code:
 
 ```bash
-grep -rn "🔍 DEBUG PROBE" . --include="*.ts" --include="*.js" --include="*.py" --include="*.swift" --include="*.go" --include="*.kt" --include="*.java" --include="*.sh"
+grep -rn "🔍 DEBUG PROBE" . --include="*.ts" --include="*.js" --include="*.py" --include="*.swift" --include="*.go" --include="*.kt" --include="*.java" --include="*.sh" --include="*.vue" --include="*.jsx" --include="*.tsx" --include="*.svelte"
 ```
 
 For each file, remove entire probe blocks — everything from `🔍 DEBUG PROBE [N]` to `🔍 DEBUG PROBE END [N]` inclusive. Use the Edit tool to delete each block. The START/END markers ensure no real code is accidentally removed.
@@ -273,7 +327,7 @@ For each file, remove entire probe blocks — everything from `🔍 DEBUG PROBE 
 Verify cleanup is complete:
 
 ```bash
-grep -rn "DEBUG PROBE" . --include="*.ts" --include="*.js" --include="*.py" --include="*.swift" --include="*.go" --include="*.kt" --include="*.java" --include="*.sh"
+grep -rn "DEBUG PROBE" . --include="*.ts" --include="*.js" --include="*.py" --include="*.swift" --include="*.go" --include="*.kt" --include="*.java" --include="*.sh" --include="*.vue" --include="*.jsx" --include="*.tsx" --include="*.svelte"
 ```
 
 This must return zero results. **No probe code may remain.**
@@ -286,6 +340,7 @@ This must return zero results. **No probe code may remain.**
 | `funcName-exit` | `processOrder-exit` | Function exit |
 | `funcName-error` | `processOrder-error` | Error catch |
 | `varName-state` | `cart-state` | State snapshot |
+| `reactive-state` | `reactive-state` | Vue ref/computed, React state |
 | `condition-branch` | `earlyReturn-branch` | Control flow branch |
 | `loop-iter` | `retry-iter` | Loop iteration |
 | `async-await` | `fetchData-await` | Async await point |
