@@ -1,5 +1,32 @@
 # Claude Code Debug Mode
 
+> ## ⚠️ This repository has moved
+>
+> **`debug-mode` is now bundled into [`lifedever/skills-plugin`](https://github.com/lifedever/skills-plugin)** along with the rest of my Claude Code skills, so it can be installed as a single plugin and auto-update via the marketplace.
+>
+> ### New installation
+>
+> ```
+> /plugin marketplace add lifedever/skills-plugin
+> /plugin install skills
+> ```
+>
+> Then invoke as `/skills:debug-mode` in Claude Code.
+>
+> ### If you previously cloned this repo into `~/.claude/skills/`
+>
+> Remove the old copy first to avoid duplicates:
+>
+> ```bash
+> rm -rf ~/.claude/skills/debug-mode
+> ```
+>
+> Then install the plugin (commands above).
+>
+> This repository is no longer maintained. All future updates ship via `skills-plugin`.
+
+---
+
 Runtime debugging skill for Claude Code — inspired by [Cursor's Debug Mode](https://cursor.com/docs/agent/debug-mode).
 
 Instead of guessing at bugs, this skill instruments your code with log probes, collects runtime data, and uses that evidence to locate and fix issues.
@@ -26,25 +53,19 @@ Step 6: Fix & Verify — Apply fix, re-run with probes to confirm (VERIFY run)
 Step 7: Cleanup     — Remove all probes and .claude-debug/ directory
 ```
 
-## Installation
-
-```bash
-claude skill add lifedever/claudecode-debug-mode
-```
-
 ## Usage
 
-In Claude Code, type:
+In Claude Code (after installing via `skills-plugin` — see top of this file):
 
 ```
-/debug-mode <describe your bug>
+/skills:debug-mode <describe your bug>
 ```
 
 Examples:
 
-- `/debug-mode the checkout sometimes fails with "insufficient stock" even though the UI shows items in stock`
-- `/debug-mode race condition in the order processing — two concurrent requests both succeed when only one should`
-- `/debug-mode the API response is sometimes empty but only under load`
+- `/skills:debug-mode the checkout sometimes fails with "insufficient stock" even though the UI shows items in stock`
+- `/skills:debug-mode race condition in the order processing — two concurrent requests both succeed when only one should`
+- `/skills:debug-mode the API response is sometimes empty but only under load`
 
 ## Probe Format
 
