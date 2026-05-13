@@ -8,7 +8,7 @@
 >
 > ```
 > /plugin marketplace add lifedever/skills-plugin
-> /plugin install lifedever
+> /plugin install lifedever@skills-plugin
 > ```
 >
 > Then invoke as `/lifedever:debug-mode` in Claude Code.
