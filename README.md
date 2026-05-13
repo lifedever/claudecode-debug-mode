@@ -8,10 +8,10 @@
 >
 > ```
 > /plugin marketplace add lifedever/skills-plugin
-> /plugin install skills
+> /plugin install lifedever
 > ```
 >
-> Then invoke as `/skills:debug-mode` in Claude Code.
+> Then invoke as `/lifedever:debug-mode` in Claude Code.
 >
 > ### If you previously cloned this repo into `~/.claude/skills/`
 >
@@ -58,14 +58,14 @@ Step 7: Cleanup     — Remove all probes and .claude-debug/ directory
 In Claude Code (after installing via `skills-plugin` — see top of this file):
 
 ```
-/skills:debug-mode <describe your bug>
+/lifedever:debug-mode <describe your bug>
 ```
 
 Examples:
 
-- `/skills:debug-mode the checkout sometimes fails with "insufficient stock" even though the UI shows items in stock`
-- `/skills:debug-mode race condition in the order processing — two concurrent requests both succeed when only one should`
-- `/skills:debug-mode the API response is sometimes empty but only under load`
+- `/lifedever:debug-mode the checkout sometimes fails with "insufficient stock" even though the UI shows items in stock`
+- `/lifedever:debug-mode race condition in the order processing — two concurrent requests both succeed when only one should`
+- `/lifedever:debug-mode the API response is sometimes empty but only under load`
 
 ## Probe Format
 
